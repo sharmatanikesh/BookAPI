@@ -33,8 +33,7 @@ const createBook = async (req: Request, res: Response, next: NextFunction) => {
       "../../public/data/uploads",
       bookFileName
     );
-    console.log(" book path",bookFilePath)
-    console.log("book filename",bookFileName)
+    
 
     const bookFileUploadResult = await cloudinary.uploader.upload(
       bookFilePath,
@@ -61,7 +60,7 @@ const createBook = async (req: Request, res: Response, next: NextFunction) => {
       await fs.promises.unlink(filePath);
     await fs.promises.unlink(bookFilePath);
     }catch(error){
-      console.log("Error while deleting the file");
+      next(createHttpError(500,"Error while uploading the file"));
     }
     
 
