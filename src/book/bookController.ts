@@ -11,8 +11,6 @@ const createBook = async (req: Request, res: Response, next: NextFunction) => {
 
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const fileName = files.coverImage[0].filename;
-  console.log("FILE:",files)
-  console.log("Cover image filename",fileName)
   const coverImageMimeType = files.coverImage[0].mimetype.split("/").at(-1);
   const filePath = path.resolve(
     __dirname,
@@ -33,7 +31,6 @@ const createBook = async (req: Request, res: Response, next: NextFunction) => {
       "../../public/data/uploads",
       bookFileName
     );
-    
 
     const bookFileUploadResult = await cloudinary.uploader.upload(
       bookFilePath,
@@ -56,20 +53,17 @@ const createBook = async (req: Request, res: Response, next: NextFunction) => {
       file: bookFileUploadResult.secure_url,
     });
 
-    try{
+    try {
       await fs.promises.unlink(filePath);
-    await fs.promises.unlink(bookFilePath);
-    }catch(error){
-      next(createHttpError(500,"Error while uploading the file"));
+      await fs.promises.unlink(bookFilePath);
+    } catch (error) {
+      next(createHttpError(500, "Error while uploading the file"));
     }
-    
 
     res.status(201).json({
       id: newBook._id,
     });
   } catch (err) {
-    console.log(err);
-    console.log("error while uploading the file");
     return next(createHttpError(500, "Error while uploading the files"));
   }
 };
@@ -86,47 +80,64 @@ const updateBook = async (req: Request, res: Response, next: NextFunction) => {
     return next(createHttpError(404, "Book is not found"));
   }
 
+  // Checking access
+  const _req = req as AuthRequest;
+  if (book.author.toString() !== _req.userId) {
+    return next(createHttpError(403, "You can not update others book."));
+  }
+
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   let completeCoverImage = "";
+  try {
+    if (files.coverImage) {
+      const filename = files.coverImage[0].filename;
+      console.log("FILENAME",filename);
+      const converMimeType = files.coverImage[0].mimetype.split("/").at(-1);
 
-  if (files.coverImage) {
-    const filename = files.coverImage[0].fieldname;
-    const converMimeType = files.coverImage[0].mimetype.split("/").at(-1);
+      const filePath = path.resolve(
+        __dirname,
+        "../../public/data/uploads/" + filename
+      );
 
-    const filePath = path.resolve(
-      __dirname,
-      "../../public/data/uploads/" + filename
-    );
+      completeCoverImage = filename;
+      const uploadResult = await cloudinary.uploader.upload(filePath, {
+        filename_override: completeCoverImage,
+        folder: "book-covers",
+        format: converMimeType,
+      });
 
-    completeCoverImage = filename;
-    const uploadResult = await cloudinary.uploader.upload(filePath, {
-      filename_override: completeCoverImage,
-      folder: "book-covers",
-      format: converMimeType,
-    });
-
-    completeCoverImage = uploadResult.secure_url;
-    await fs.promises.unlink(filePath);
+      completeCoverImage = uploadResult.secure_url;
+      await fs.promises.unlink(filePath);
+    }
+  } catch (err) {
+    return next(createHttpError(500, "Error while updating the coverImage "));
   }
   let completeFileName = "";
-  if (files.file) {
-    const bookFilePath = path.resolve(
-      __dirname,
-      "../../public/data/uploads/" + files.file[0].filename
-    );
+  try {
+    if (files.file) {
+      const bookFilePath = path.resolve(
+        __dirname,
+        "../../public/data/uploads/" + files.file[0].filename
+      );
 
-    const bookFileName = files.file[0].filename;
-    completeFileName = bookFileName;
+      const bookFileName = files.file[0].filename;
 
-    const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath, {
-      resource_type: "raw",
-      filename_override: completeFileName,
-      folder: "book-pdfs",
-      format: "pdf",
-    });
 
-    completeFileName = uploadResultPdf.secure_url;
-    await fs.promises.unlink(bookFilePath);
+      console.log("BOOKFILENAME",bookFileName)
+      completeFileName = bookFileName;
+
+      const uploadResultPdf = await cloudinary.uploader.upload(bookFilePath, {
+        resource_type: "raw",
+        filename_override: completeFileName,
+        folder: "book-pdfs",
+        format: "pdf",
+      });
+
+      completeFileName = uploadResultPdf.secure_url;
+      await fs.promises.unlink(bookFilePath);
+    }
+  } catch (err) {
+    return next(createHttpError(500, "Error while updating the pdf"));
   }
 
   try {
@@ -200,7 +211,7 @@ const deleteBook = async (req: Request, res: Response, next: NextFunction) => {
 
   const bookFileSplits = book.file.split("/");
   const bookFilePublicId = bookFileSplits.at(-2) + "/" + bookFileSplits.at(-1);
-  console.log("bookFilePublicId", bookFilePublicId);
+
 
   try {
     await cloudinary.uploader.destroy(coverImagePublicId);
@@ -213,7 +224,9 @@ const deleteBook = async (req: Request, res: Response, next: NextFunction) => {
     return next(createHttpError(500, "Error while getting a book"));
   }
 
-  return res.sendStatus(204);
+  return res.sendStatus(204).json({
+    message:"Deleted Successfully"
+  });
 };
 
 export { createBook, updateBook, listBooks, getSingleBook, deleteBook };
